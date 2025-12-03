@@ -1,0 +1,7 @@
+.vscode
+venv
+all_trips.json
+routes.txt
+stop_times.txt
+stops.txt
+trips.txt

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TriMet GTFS Data Visualization - Bret Bernhoft</title>
+    <link
+      rel="icon"
+      href="https://hosting.photobucket.com/bbcfb0d4-be20-44a0-94dc-65bff8947cf2/ff4a3384-baa9-4bc2-94c9-6bff4e3d3ea0.png"
+      sizes="any"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="main.css" />
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <div class="control">
+      <div class="row">
+        <button id="playpause">Play</button>
+        <label id="timeLabel">09:00:00</label>
+      </div>
+
+      <div class="row">
+        <label>Time</label>
+        <input id="time" type="range" min="32400" max="64799" value="32400" />
+      </div>
+
+      <div class="row">
+        <label>Speed</label>
+        <select id="speed">
+          <option value="60" selected>x60</option>
+          <option value="120">x120</option>
+          <option value="300">x300</option>
+          <option value="600">x600</option>
+          <option value="1200">x1200</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label>Trails</label>
+        <select id="trailSeconds">
+          <option value="0" selected>Off</option>
+          <option value="300">5 min</option>
+          <option value="600">10 min</option>
+          <option value="1800">30 min</option>
+        </select>
+      </div>
+
+      <div class="activity">
+        <div class="statline">
+          <div class="k">Active vehicles</div>
+          <div class="v" id="statActive">0</div>
+        </div>
+
+        <div class="statline">
+          <div class="k">Trips loaded (hour)</div>
+          <div class="v" id="statTripsHour">0</div>
+        </div>
+
+        <div class="statline">
+          <div class="k">Percent active</div>
+          <div class="v" id="statPercent">0%</div>
+        </div>
+
+        <div class="statline">
+          <div class="k">Hour window</div>
+          <div class="v" id="statHourWindow">09:00–09:59</div>
+        </div>
+
+        <div class="statline">
+          <div class="k">Speed / Trails</div>
+          <div class="v" id="statSpeedTrails">x60 / Off</div>
+        </div>
+
+        <div class="routes-live" id="statRoutesLive"></div>
+      </div>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="main.js"></script>
+  </body>
+</html>
