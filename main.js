@@ -228,7 +228,7 @@ function rebuildLayersForHour(h) {
         const rname = r.short_name ? `${r.short_name} — ` : "";
         return `${rname}${trip.headsign || ""}<br>Trip ${trip.trip_id}`;
       },
-      { sticky: true }
+      { sticky: true },
     );
     return m;
   });
