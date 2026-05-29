@@ -92,7 +92,6 @@ with open(STOPS_CSV, newline="", encoding="utf-8") as f:
 
 print("Loading stop_times...")
 per_trip = defaultdict(list)
-hourly_by_stop = defaultdict(lambda: [0]*24)
 
 with open(STOP_TIMES_CSV, newline="", encoding="utf-8") as f:
     for r in csv.DictReader(f):
@@ -109,10 +108,6 @@ with open(STOP_TIMES_CSV, newline="", encoding="utf-8") as f:
         sid = r["stop_id"]
 
         per_trip[tid].append({"seq": seq, "t_arr": t_arr, "t_dep": t_dep, "stop_id": sid})
-
-        if sid in stops and WINDOW_START_SEC <= t_dep < WINDOW_END_SEC:
-            hr = max(0, min(23, t_dep // 3600))
-            hourly_by_stop[sid][hr] += 1
 
 print("Building hour-chunked trips...")
 trips_by_hour = {h: [] for h in range(WINDOW_START_HOUR, WINDOW_END_HOUR)}
@@ -175,12 +170,6 @@ for tid, rows in per_trip.items():
         if trip_h is not None:
             trips_by_hour[h].append(trip_h)
 
-stops_hourly = []
-for sid, vec in hourly_by_stop.items():
-    if sid in stops:
-        lat, lon = stops[sid]
-        stops_hourly.append({"stop_id": sid, "lat": lat, "lon": lon, "hourly": vec})
-
 print("Writing combined JSON file...")
 output = {
     "meta": {
@@ -191,7 +180,6 @@ output = {
         }
     },
     "routes": routes,
-    "stops_hourly": stops_hourly,
     "trips_by_hour": [
         {"hour": h, "trips": trips_by_hour[h]}
         for h in range(WINDOW_START_HOUR, WINDOW_END_HOUR)

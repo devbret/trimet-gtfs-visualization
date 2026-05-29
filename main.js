@@ -17,16 +17,28 @@ const statHourWindow = document.getElementById("statHourWindow");
 const statSpeedTrails = document.getElementById("statSpeedTrails");
 const statRoutesLive = document.getElementById("statRoutesLive");
 
-const START_HOUR = 9;
-const END_HOUR = 18;
-const START_SEC = START_HOUR * 3600;
-const END_SEC_EXCL = END_HOUR * 3600;
-const END_SEC = END_SEC_EXCL - 1;
+let START_HOUR = 9;
+let END_HOUR = 18;
+let START_SEC = START_HOUR * 3600;
+let END_SEC_EXCL = END_HOUR * 3600;
+let END_SEC = END_SEC_EXCL - 1;
 
-timeInp.min = START_SEC;
-timeInp.max = END_SEC;
-if (+timeInp.value < START_SEC) timeInp.value = START_SEC;
-if (+timeInp.value > END_SEC) timeInp.value = END_SEC;
+function applyWindow(win) {
+  if (win && Number.isFinite(win.start_hour) && Number.isFinite(win.end_hour)) {
+    START_HOUR = win.start_hour | 0;
+    END_HOUR = win.end_hour | 0;
+  }
+  START_SEC = START_HOUR * 3600;
+  END_SEC_EXCL = END_HOUR * 3600;
+  END_SEC = END_SEC_EXCL - 1;
+
+  timeInp.min = START_SEC;
+  timeInp.max = END_SEC;
+  if (+timeInp.value < START_SEC) timeInp.value = START_SEC;
+  if (+timeInp.value > END_SEC) timeInp.value = END_SEC;
+}
+
+applyWindow(null);
 
 let isPlaying = false;
 let simTime = +timeInp.value;
@@ -46,7 +58,7 @@ function currentHour(t) {
 function fmtHourWindow(h) {
   const start = h * 3600;
   const end = start + 3599;
-  return `${fmt(start).slice(0, 5)}–${fmt(end).slice(0, 5)}`;
+  return `${fmt(start).slice(0, 5)}-${fmt(end).slice(0, 5)}`;
 }
 
 function setSimTime(t) {
@@ -110,7 +122,7 @@ function b64ToBytes(b64) {
 function varintDecode(bytes, idxRef) {
   let x = 0,
     s = 0;
-  while (true) {
+  while (idxRef.i < bytes.length) {
     const b = bytes[idxRef.i++];
     x |= (b & 0x7f) << s;
     if ((b & 0x80) === 0) break;
@@ -139,21 +151,45 @@ function interp(a, b, t) {
   return a + (b - a) * t;
 }
 
+function findActiveSegment(t0, t1, time) {
+  let lo = 0,
+    hi = t0.length - 1,
+    ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (t0[mid] <= time) {
+      ans = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return ans >= 0 && time <= t1[ans] ? ans : -1;
+}
+
 let ROUTES = {};
-let Q = 100000;
+let Q = 50000;
 
 const HOUR_CACHE = new Map();
 let CURRENT_HOUR = null;
 
+const TRAIL_CHUNKS = 5;
+
 let markers = [];
 let trailData = [];
-let trailLayers = [];
+let trailPolys = [];
 
 fetch("all_trips.json")
-  .then((r) => r.json())
+  .then((r) => {
+    if (!r.ok) {
+      throw new Error(`Failed to load all_trips.json (HTTP ${r.status})`);
+    }
+    return r.json();
+  })
   .then((bundle) => {
     ROUTES = bundle.routes || {};
     Q = bundle.meta && bundle.meta.q ? bundle.meta.q : Q;
+    applyWindow(bundle.meta && bundle.meta.window);
 
     const tb = Array.isArray(bundle.trips_by_hour) ? bundle.trips_by_hour : [];
 
@@ -194,14 +230,34 @@ fetch("all_trips.json")
     const h0 = currentHour(simTime);
     rebuildLayersForHour(h0);
     renderVehicles();
+  })
+  .catch((err) => {
+    console.error(err);
+    statRoutesLive.innerHTML =
+      '<div class="subtle">Could not load all_trips.json. Run app.py to generate it, then reload.</div>';
   });
 
 function clearLayers() {
   for (const m of markers) map.removeLayer(m);
-  for (const lg of trailLayers) map.removeLayer(lg);
+  for (const polys of trailPolys) {
+    if (polys) for (const p of polys) map.removeLayer(p);
+  }
   markers = [];
-  trailLayers = [];
+  trailPolys = [];
   trailData = [];
+}
+
+function ensureTrailPolys(i, col) {
+  if (trailPolys[i]) return trailPolys[i];
+  const polys = [];
+  for (let c = 0; c < TRAIL_CHUNKS; c++) {
+    const alpha = (c + 1) / TRAIL_CHUNKS;
+    polys.push(
+      L.polyline([], { weight: 3, opacity: 0.2 * alpha, color: col }).addTo(map),
+    );
+  }
+  trailPolys[i] = polys;
+  return polys;
 }
 
 function rebuildLayersForHour(h) {
@@ -234,7 +290,7 @@ function rebuildLayersForHour(h) {
   });
 
   trailData = trips.map(() => []);
-  trailLayers = trips.map(() => L.layerGroup().addTo(map));
+  trailPolys = trips.map(() => null);
 
   statHourWindow.textContent = fmtHourWindow(h);
 }
@@ -312,20 +368,18 @@ function renderVehicles() {
       lat = null,
       lon = null;
 
-    for (let j = 0; j < t0.length; j++) {
+    const j = findActiveSegment(t0, t1, simTime);
+    if (j >= 0) {
       const ta = t0[j],
         tb = t1[j];
-      if (simTime >= ta && simTime <= tb) {
-        const u = (simTime - ta) / (tb - ta);
-        const aLat = lat0[j] / Q,
-          aLon = lon0[j] / Q;
-        const bLat = lat1[j] / Q,
-          bLon = lon1[j] / Q;
-        lat = interp(aLat, bLat, u);
-        lon = interp(aLon, bLon, u);
-        found = true;
-        break;
-      }
+      const u = tb > ta ? (simTime - ta) / (tb - ta) : 0;
+      const aLat = lat0[j] / Q,
+        aLon = lon0[j] / Q;
+      const bLat = lat1[j] / Q,
+        bLon = lon1[j] / Q;
+      lat = interp(aLat, bLat, u);
+      lon = interp(aLon, bLon, u);
+      found = true;
     }
 
     if (found && lat != null) {
@@ -346,25 +400,23 @@ function renderVehicles() {
         while (trailData[i].length && trailData[i][0].t < tmin)
           trailData[i].shift();
 
-        trailLayers[i].clearLayers();
         const pts = trailData[i];
+        const polys = ensureTrailPolys(i, col);
         if (pts.length > 1) {
-          const chunks = 5;
-          for (let c = 0; c < chunks; c++) {
-            const a = Math.floor((c * (pts.length - 1)) / chunks);
-            const b = Math.floor(((c + 1) * (pts.length - 1)) / chunks);
-            if (b <= a) continue;
-            const latlngs = pts.slice(a, b + 1).map((p) => [p.lat, p.lon]);
-            const alpha = (c + 1) / chunks;
-            L.polyline(latlngs, {
-              weight: 3,
-              opacity: 0.2 * alpha,
-              color: col,
-            }).addTo(trailLayers[i]);
+          for (let c = 0; c < TRAIL_CHUNKS; c++) {
+            const a = Math.floor((c * (pts.length - 1)) / TRAIL_CHUNKS);
+            const b = Math.floor(((c + 1) * (pts.length - 1)) / TRAIL_CHUNKS);
+            if (b <= a) {
+              polys[c].setLatLngs([]);
+              continue;
+            }
+            polys[c].setLatLngs(pts.slice(a, b + 1).map((p) => [p.lat, p.lon]));
           }
+        } else {
+          for (const p of polys) p.setLatLngs([]);
         }
       } else {
-        trailLayers[i].clearLayers();
+        if (trailPolys[i]) for (const p of trailPolys[i]) p.setLatLngs([]);
         trailData[i] = [];
       }
     } else {
