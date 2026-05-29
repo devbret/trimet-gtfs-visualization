@@ -4,7 +4,7 @@
 
 Processes TriMet GTFS data into a JSON file, which a frontend decodes to animate vehicles on a map with interactive controls, trails and statistics.
 
-## Overview
+## Application Overview
 
 This program has two main parts working together; those being a (1) Python script for processing data and (2) JavaScript frontend for visualizing any findings.
 
@@ -14,9 +14,9 @@ The JavaScript then loads this `all_trips.json` file and uses Leaflet to animate
 
 At each animation frame it figures out which segment of each trip is active, calculates the current vehicle position and updates circle markers on the map. It also computes live stats and displays them in a sidebar, giving an at-a-glance view of network activity for any moment in the chosen time window.
 
-## Set Up Instructions
+## Basic Setup Instructions
 
-Below are the required software programs and instructions for installing and using this application.
+Below are the required software programs and instructions for installing and using this application on a Linux machine.
 
 ### Programs Needed
 
@@ -30,25 +30,27 @@ Below are the required software programs and instructions for installing and usi
 
 2. Open a terminal
 
-3. Clone this repository using `git` by running the following command: `git clone git@github.com:devbret/portland-parks-trees.git`
+3. Clone this repository: `git clone git@github.com:devbret/trimet-gtfs-visualization.git`
 
-4. Navigate to the repo's directory by running: `cd portland-parks-trees`
+4. Navigate to the repo: `cd trimet-gtfs-visualization`
 
-5. Create a virtual environment with this command: `python3 -m venv venv`
+5. Create a virtual environment: `python3 -m venv venv`
 
-6. Activate your virtual environment using: `source venv/bin/activate`
+6. Activate your virtual environment: `source venv/bin/activate`
 
 7. Download the [source data](https://developer.trimet.org/GTFS.shtml) as a CSV file
 
 8. Place the `routes.txt`, `stop_times.txt`, `stops.txt` and `trips.txt` files into the root directory of this repo
 
-9. Process the raw data using the Python script by running the following command: `python3 app.py`
+9. Process the raw data: `python3 app.py`
 
-10. Launch the application's frontend by starting a Python server with the following command: `python3 -m http.server`
+10. Launch the application's frontend: `python3 -m http.server`
 
-11. Access the heatmap visualization in a browser by visiting: `http://localhost:8000`
+11. Access the visualization in a browser: `http://localhost:8000`
 
-12. Explore and enjoy
+12. When finished, close the server: `CTRL + c`
+
+13. Exit the virtual environment: `deactivate`
 
 ## Other Considerations
 
