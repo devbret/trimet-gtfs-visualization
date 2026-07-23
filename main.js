@@ -1,4 +1,8 @@
-const map = L.map("map", { zoomControl: true }).setView([45.52, -122.67], 12);
+const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView(
+  [45.52, -122.67],
+  12,
+);
+L.control.zoom({ position: "topright" }).addTo(map);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
   attribution: "© OpenStreetMap",
@@ -14,8 +18,10 @@ const statActive = document.getElementById("statActive");
 const statTripsHour = document.getElementById("statTripsHour");
 const statPercent = document.getElementById("statPercent");
 const statHourWindow = document.getElementById("statHourWindow");
-const statSpeedTrails = document.getElementById("statSpeedTrails");
 const statRoutesLive = document.getElementById("statRoutesLive");
+const clearSpotlightBtn = document.getElementById("clearSpotlight");
+const windowStartLbl = document.getElementById("windowStart");
+const windowEndLbl = document.getElementById("windowEnd");
 
 let START_HOUR = 9;
 let END_HOUR = 18;
@@ -36,6 +42,10 @@ function applyWindow(win) {
   timeInp.max = END_SEC;
   if (+timeInp.value < START_SEC) timeInp.value = START_SEC;
   if (+timeInp.value > END_SEC) timeInp.value = END_SEC;
+
+  timeInp.style.setProperty("--hours", END_HOUR - START_HOUR);
+  windowStartLbl.textContent = fmt(START_SEC).slice(0, 5);
+  windowEndLbl.textContent = fmt(END_SEC).slice(0, 5);
 }
 
 applyWindow(null);
@@ -62,25 +72,35 @@ function fmtHourWindow(h) {
 }
 
 function setSimTime(t) {
+  const prevTime = simTime;
   const prevHour = currentHour(simTime);
   simTime = Math.max(START_SEC, Math.min(END_SEC, t));
   const nextHour = currentHour(simTime);
 
   timeInp.value = Math.floor(simTime);
   timeLbl.textContent = fmt(simTime);
+  timeInp.style.setProperty(
+    "--progress",
+    `${((simTime - START_SEC) / (END_SEC - START_SEC)) * 100}%`,
+  );
+
+  if (simTime < prevTime) resetTrails();
 
   if (nextHour !== prevHour) {
     rebuildLayersForHour(nextHour);
-    renderVehicles();
-  } else {
-    renderVehicles();
   }
+  renderVehicles();
 
   if (simTime >= END_SEC) {
     isPlaying = false;
-    playBtn.textContent = "Play";
+    setPlayingUI(false);
     stopLoop();
   }
+}
+
+function setPlayingUI(playing) {
+  playBtn.classList.toggle("playing", playing);
+  playBtn.setAttribute("aria-label", playing ? "Pause" : "Play");
 }
 
 timeInp.addEventListener("input", () => setSimTime(+timeInp.value));
@@ -89,7 +109,7 @@ playBtn.addEventListener("click", () => {
     setSimTime(START_SEC);
   }
   isPlaying = !isPlaying;
-  playBtn.textContent = isPlaying ? "Pause" : "Play";
+  setPlayingUI(isPlaying);
   if (isPlaying) startLoop();
   else stopLoop();
 });
@@ -169,6 +189,23 @@ function findActiveSegment(t0, t1, time) {
 
 let ROUTES = {};
 let Q = 50000;
+let spotlightRoute = null;
+
+function panelColor(hex) {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255,
+    g = (n >> 8) & 255,
+    b = n & 255;
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  if (lum < 110) {
+    const k = ((110 - lum) / 110) * 0.6;
+    r = Math.round(r + (255 - r) * k);
+    g = Math.round(g + (255 - g) * k);
+    b = Math.round(b + (255 - b) * k);
+  }
+  return `rgb(${r}, ${g}, ${b})`;
+}
 
 const HOUR_CACHE = new Map();
 let CURRENT_HOUR = null;
@@ -247,13 +284,22 @@ function clearLayers() {
   trailData = [];
 }
 
+function resetTrails() {
+  for (let i = 0; i < trailData.length; i++) trailData[i] = [];
+  for (const polys of trailPolys) {
+    if (polys) for (const p of polys) p.setLatLngs([]);
+  }
+}
+
 function ensureTrailPolys(i, col) {
   if (trailPolys[i]) return trailPolys[i];
   const polys = [];
   for (let c = 0; c < TRAIL_CHUNKS; c++) {
     const alpha = (c + 1) / TRAIL_CHUNKS;
     polys.push(
-      L.polyline([], { weight: 3, opacity: 0.2 * alpha, color: col }).addTo(map),
+      L.polyline([], { weight: 3, opacity: 0.2 * alpha, color: col }).addTo(
+        map,
+      ),
     );
   }
   trailPolys[i] = polys;
@@ -261,6 +307,16 @@ function ensureTrailPolys(i, col) {
 }
 
 function rebuildLayersForHour(h) {
+  const prevEntry = CURRENT_HOUR != null ? HOUR_CACHE.get(CURRENT_HOUR) : null;
+  const prevTrails = new Map();
+  if (prevEntry) {
+    prevEntry.trips.forEach((trip, i) => {
+      if (trailData[i] && trailData[i].length) {
+        prevTrails.set(trip.trip_id, trailData[i]);
+      }
+    });
+  }
+
   CURRENT_HOUR = h;
   clearLayers();
   const entry = HOUR_CACHE.get(h);
@@ -281,7 +337,7 @@ function rebuildLayersForHour(h) {
 
     m.bindTooltip(
       () => {
-        const rname = r.short_name ? `${r.short_name} — ` : "";
+        const rname = r.short_name ? `${r.short_name} - ` : "";
         return `${rname}${trip.headsign || ""}<br>Trip ${trip.trip_id}`;
       },
       { sticky: true },
@@ -289,49 +345,84 @@ function rebuildLayersForHour(h) {
     return m;
   });
 
-  trailData = trips.map(() => []);
+  trailData = trips.map((trip) => prevTrails.get(trip.trip_id) || []);
   trailPolys = trips.map(() => null);
 
   statHourWindow.textContent = fmtHourWindow(h);
 }
 
-function updateActivity({ activeCount, tripsCount, byRoute }) {
+const STATS_INTERVAL_MS = 250;
+let statsLastApplied = 0;
+let statsPending = null;
+let statsTimer = null;
+
+function updateActivity(stats) {
+  statsPending = stats;
+  const elapsed = performance.now() - statsLastApplied;
+  if (elapsed >= STATS_INTERVAL_MS) {
+    applyActivity();
+  } else if (!statsTimer) {
+    statsTimer = setTimeout(applyActivity, STATS_INTERVAL_MS - elapsed);
+  }
+}
+
+function applyActivity() {
+  if (statsTimer) {
+    clearTimeout(statsTimer);
+    statsTimer = null;
+  }
+  statsLastApplied = performance.now();
+  if (!statsPending) return;
+  const { activeCount, tripsCount, byRoute } = statsPending;
+
   statActive.textContent = activeCount;
   statTripsHour.textContent = tripsCount;
   const pct = tripsCount > 0 ? (activeCount / tripsCount) * 100 : 0;
   statPercent.textContent = `${pct.toFixed(1)}%`;
 
-  const speed = speedSel.value;
-  const trails = trailSel.options[trailSel.selectedIndex].textContent;
-  statSpeedTrails.textContent = `x${speed} / ${trails}`;
+  clearSpotlightBtn.hidden = spotlightRoute == null;
 
   statRoutesLive.innerHTML = "";
   const entries = Object.entries(byRoute);
   entries.sort((a, b) => b[1] - a[1]);
 
   const topN = 12;
-  for (const [rid, count] of entries.slice(0, topN)) {
+  const top = entries.slice(0, topN);
+  const maxCount = top.length ? top[0][1] : 0;
+
+  for (const [rid, count] of top) {
     const r = ROUTES[rid] || {};
-    const col = r.color || "#084C8D";
+    const col = panelColor(r.color || "#084C8D");
     const short = r.short_name || rid;
 
     const row = document.createElement("div");
     row.className = "route-row";
-
-    const sw = document.createElement("span");
-    sw.className = "swatch";
-    sw.style.background = col;
+    row.dataset.rid = rid;
+    if (spotlightRoute != null) {
+      row.classList.add(rid === spotlightRoute ? "spotlit" : "dimmed");
+    }
+    row.title =
+      rid === spotlightRoute
+        ? "Click to clear spotlight"
+        : "Click to spotlight this route";
 
     const name = document.createElement("div");
     name.className = "route-name";
     name.textContent = short;
 
+    const bar = document.createElement("div");
+    bar.className = "route-bar";
+    const fill = document.createElement("span");
+    fill.style.width = maxCount ? `${(count / maxCount) * 100}%` : "0%";
+    fill.style.background = col;
+    bar.appendChild(fill);
+
     const c = document.createElement("div");
     c.className = "route-count";
     c.textContent = count;
 
-    row.appendChild(sw);
     row.appendChild(name);
+    row.appendChild(bar);
     row.appendChild(c);
     statRoutesLive.appendChild(row);
   }
@@ -386,10 +477,12 @@ function renderVehicles() {
       activeCount++;
       byRoute[trip.route_id] = (byRoute[trip.route_id] || 0) + 1;
 
+      const dim = spotlightRoute != null && trip.route_id !== spotlightRoute;
+
       markers[i].setLatLng([lat, lon]);
       markers[i].setStyle({
-        opacity: 1,
-        fillOpacity: 0.9,
+        opacity: dim ? 0.2 : 1,
+        fillOpacity: dim ? 0.12 : 0.9,
         color: col,
         fillColor: col,
       });
@@ -404,6 +497,9 @@ function renderVehicles() {
         const polys = ensureTrailPolys(i, col);
         if (pts.length > 1) {
           for (let c = 0; c < TRAIL_CHUNKS; c++) {
+            polys[c].setStyle({
+              opacity: 0.2 * ((c + 1) / TRAIL_CHUNKS) * (dim ? 0.15 : 1),
+            });
             const a = Math.floor((c * (pts.length - 1)) / TRAIL_CHUNKS);
             const b = Math.floor(((c + 1) * (pts.length - 1)) / TRAIL_CHUNKS);
             if (b <= a) {
@@ -433,3 +529,17 @@ function renderVehicles() {
 
 trailSel.addEventListener("change", renderVehicles);
 speedSel.addEventListener("change", renderVehicles);
+
+statRoutesLive.addEventListener("click", (e) => {
+  const row = e.target.closest(".route-row");
+  if (!row) return;
+  spotlightRoute = spotlightRoute === row.dataset.rid ? null : row.dataset.rid;
+  renderVehicles();
+  applyActivity();
+});
+
+clearSpotlightBtn.addEventListener("click", () => {
+  spotlightRoute = null;
+  renderVehicles();
+  applyActivity();
+});

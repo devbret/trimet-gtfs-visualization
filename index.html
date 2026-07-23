@@ -21,18 +21,51 @@
     <div id="map"></div>
 
     <div class="control">
-      <div class="row">
-        <button id="playpause">Play</button>
-        <label id="timeLabel">09:00:00</label>
+      <div class="panel-head">
+        <h1>TriMet Network Activity</h1>
       </div>
 
-      <div class="row">
-        <label>Time</label>
-        <input id="time" type="range" min="32400" max="64799" value="32400" />
+      <div class="clock-row">
+        <button id="playpause" class="play-btn" aria-label="Play">
+          <svg
+            class="ic-play"
+            viewBox="0 0 16 16"
+            width="16"
+            height="16"
+            aria-hidden="true"
+          >
+            <path d="M4.5 2.5v11l9-5.5z" fill="currentColor" />
+          </svg>
+          <svg
+            class="ic-pause"
+            viewBox="0 0 16 16"
+            width="16"
+            height="16"
+            aria-hidden="true"
+          >
+            <path d="M4 2.5h3v11H4zM9 2.5h3v11H9z" fill="currentColor" />
+          </svg>
+        </button>
+        <output id="timeLabel">09:00:00</output>
       </div>
 
-      <div class="row">
-        <label>Speed</label>
+      <div class="slider-block">
+        <input
+          id="time"
+          type="range"
+          min="32400"
+          max="64799"
+          value="32400"
+          aria-label="Simulation time"
+        />
+        <div class="slider-ends">
+          <span id="windowStart">09:00</span>
+          <span id="windowEnd">17:59</span>
+        </div>
+      </div>
+
+      <div class="settings">
+        <label for="speed">Speed</label>
         <select id="speed">
           <option value="60" selected>x60</option>
           <option value="120">x120</option>
@@ -40,10 +73,8 @@
           <option value="600">x600</option>
           <option value="1200">x1200</option>
         </select>
-      </div>
 
-      <div class="row">
-        <label>Trails</label>
+        <label for="trailSeconds">Trails</label>
         <select id="trailSeconds">
           <option value="0" selected>Off</option>
           <option value="300">5 min</option>
@@ -53,31 +84,30 @@
       </div>
 
       <div class="activity">
-        <div class="statline">
-          <div class="k">Active vehicles</div>
-          <div class="v" id="statActive">0</div>
+        <div class="stat-hero">
+          <div class="stat-label">Active vehicles</div>
+          <div class="stat-value" id="statActive">0</div>
         </div>
 
-        <div class="statline">
-          <div class="k">Trips loaded (hour)</div>
-          <div class="v" id="statTripsHour">0</div>
+        <div class="stat-row">
+          <div class="stat">
+            <div class="stat-label">Trips this hour</div>
+            <div class="stat-value-sm" id="statTripsHour">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Percent active</div>
+            <div class="stat-value-sm" id="statPercent">0%</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Hour window</div>
+            <div class="stat-value-sm" id="statHourWindow">09:00-09:59</div>
+          </div>
         </div>
 
-        <div class="statline">
-          <div class="k">Percent active</div>
-          <div class="v" id="statPercent">0%</div>
+        <div class="routes-head">
+          <h4>Busiest routes</h4>
+          <button id="clearSpotlight" hidden>✕ Clear</button>
         </div>
-
-        <div class="statline">
-          <div class="k">Hour window</div>
-          <div class="v" id="statHourWindow">09:00–09:59</div>
-        </div>
-
-        <div class="statline">
-          <div class="k">Speed / Trails</div>
-          <div class="v" id="statSpeedTrails">x60 / Off</div>
-        </div>
-
         <div class="routes-live" id="statRoutesLive"></div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 # TriMet GTFS Data Visualization
 
-![Screenshot from the map/app showing thousands of individual dots, each representing a form of mass transit.](https://hosting.photobucket.com/bbcfb0d4-be20-44a0-94dc-65bff8947cf2/d5e82a70-f5fb-4314-89f7-3d169ad45976.png)
+![Screenshot from the map/app showing thousands of individual dots, each representing a form of mass transit.](https://hosting.photobucket.com/bbcfb0d4-be20-44a0-94dc-65bff8947cf2/75a6a46c-d871-4058-b220-fc590ebd107b.png)
 
 Processes TriMet GTFS data into a JSON file, which a frontend decodes to animate vehicles on a map with interactive controls, trails and statistics.
 
