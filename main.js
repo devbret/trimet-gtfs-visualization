@@ -5,7 +5,7 @@ const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView(
 L.control.zoom({ position: "topright" }).addTo(map);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
-  attribution: "© OpenStreetMap",
+  attribution: "&copy; OpenStreetMap",
 }).addTo(map);
 
 const playBtn = document.getElementById("playpause");
@@ -187,7 +187,37 @@ function findActiveSegment(t0, t1, time) {
   return ans >= 0 && time <= t1[ans] ? ans : -1;
 }
 
+function decodeShapes(raw) {
+  const out = {};
+  for (const [id, s] of Object.entries(raw || {})) {
+    out[id] = {
+      lat: Int32Array.from(unpackStream(s.lat)),
+      lon: Int32Array.from(unpackStream(s.lon)),
+      d: Int32Array.from(unpackStream(s.d)),
+    };
+  }
+  return out;
+}
+
+function pointAlongShape(shape, dist) {
+  const { lat, lon, d } = shape;
+  let lo = 0,
+    hi = d.length - 2;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (d[mid] <= dist) lo = mid;
+    else hi = mid - 1;
+  }
+  const span = d[lo + 1] - d[lo];
+  const u = span > 0 ? Math.max(0, Math.min(1, (dist - d[lo]) / span)) : 0;
+  return [
+    interp(lat[lo], lat[lo + 1], u) / Q,
+    interp(lon[lo], lon[lo + 1], u) / Q,
+  ];
+}
+
 let ROUTES = {};
+let SHAPES = {};
 let Q = 50000;
 let spotlightRoute = null;
 
@@ -226,6 +256,7 @@ fetch("all_trips.json")
   .then((bundle) => {
     ROUTES = bundle.routes || {};
     Q = bundle.meta && bundle.meta.q ? bundle.meta.q : Q;
+    SHAPES = decodeShapes(bundle.shapes);
     applyWindow(bundle.meta && bundle.meta.window);
 
     const tb = Array.isArray(bundle.trips_by_hour) ? bundle.trips_by_hour : [];
@@ -239,9 +270,27 @@ fetch("all_trips.json")
         if (!sp) continue;
 
         const T = unpackStream(sp.t);
-        const P = unpackStream(sp.p);
         const n = sp.n | 0;
 
+        if (sp.d) {
+          const shape = SHAPES[trip.shape_id];
+          if (!shape) continue;
+          const D = unpackStream(sp.d);
+          const t0 = new Int32Array(n);
+          const t1 = new Int32Array(n);
+          const d0 = new Int32Array(n);
+          const d1 = new Int32Array(n);
+          for (let j = 0; j < n; j++) {
+            t0[j] = T[2 * j];
+            t1[j] = T[2 * j + 1];
+            d0[j] = D[2 * j];
+            d1[j] = D[2 * j + 1];
+          }
+          trip._seg = { t0, t1, d0, d1, shape };
+          continue;
+        }
+
+        const P = unpackStream(sp.p);
         const t0 = new Int32Array(n);
         const t1 = new Int32Array(n);
         const lat0 = new Int32Array(n);
@@ -451,7 +500,7 @@ function renderVehicles() {
       continue;
     }
 
-    const { t0, t1, lat0, lon0, lat1, lon1 } = seg;
+    const { t0, t1 } = seg;
     const r = ROUTES[trip.route_id] || {};
     const col = r.color || "#084C8D";
 
@@ -464,12 +513,19 @@ function renderVehicles() {
       const ta = t0[j],
         tb = t1[j];
       const u = tb > ta ? (simTime - ta) / (tb - ta) : 0;
-      const aLat = lat0[j] / Q,
-        aLon = lon0[j] / Q;
-      const bLat = lat1[j] / Q,
-        bLon = lon1[j] / Q;
-      lat = interp(aLat, bLat, u);
-      lon = interp(aLon, bLon, u);
+      if (seg.shape) {
+        [lat, lon] = pointAlongShape(
+          seg.shape,
+          interp(seg.d0[j], seg.d1[j], u),
+        );
+      } else {
+        const aLat = seg.lat0[j] / Q,
+          aLon = seg.lon0[j] / Q;
+        const bLat = seg.lat1[j] / Q,
+          bLon = seg.lon1[j] / Q;
+        lat = interp(aLat, bLat, u);
+        lon = interp(aLon, bLon, u);
+      }
       found = true;
     }
 

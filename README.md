@@ -40,7 +40,7 @@ Below are the required software programs and instructions for installing and usi
 
 7. Download the [source data](https://developer.trimet.org/GTFS.shtml) as a CSV file
 
-8. Place the `routes.txt`, `stop_times.txt`, `stops.txt` and `trips.txt` files into the root directory of this repo
+8. Place the `routes.txt`, `stop_times.txt`, `stops.txt`, `shapes.txt` and `trips.txt` files into the root directory of this repo
 
 9. Process the raw data: `python3 app.py`
 
