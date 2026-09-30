@@ -3,6 +3,7 @@ __pycache__
 venv
 all_trips.json
 routes.txt
+shapes.txt
 stop_times.txt
 stops.txt
 trips.txt
